@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+
+silent: true
+
+vars:
+  PROJECT:
+    sh: echo "$(basename $(pwd))"
+  BUILD_DATE:
+    sh: date '+%Y-%m-%d-%H:%M:%S'
+  GIT_LATEST_TAG:
+    sh: git tag -l | sort -r -V | head -n 1 || echo "unknown"
+  TERM: screen-256color
+  LOCAL_BIN_PATH: "{{.ROOT_DIR}}/venv/bin"
+  PYTHON_VENV_PATH: "./.venv"
+  TF_PLUGIN_CACHE_DIR: "{{.ROOT_DIR}}/tempproviders"
+
+env:
+  VENV_BASE_PATH: ./.venv
+  CONFIG_PATH: ./config
+  SCRIPT_PATH: ./scripts
+  POLICY_PATH: ./policy
+  DEFAULT_BRANCH: main
+
+includes:
+  docker:
+    taskfile: ./tasks/Taskfile.docker.yml
+    optional: true
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - |
+        task -l
+
+  venv:clean:
+    desc: Remove virtual environment
+    cmds:
+      - |
+        rm -rf {{.PYTHON_VENV_PATH}}
+
+  venv:
+    desc: Start virtual environment
+    cmds:
+      - uv sync
+    status:
+      - test -d {{.PYTHON_VENV_PATH}}
+
+  show:
+    desc: Show task variables
+    cmds:
+      - |
+        echo "ROOT_DIR: {{.ROOT_DIR}}"
+        echo "PROJECT: {{.PROJECT}}"
+        echo "OS: {{OS}}"
+        echo "ARCH: {{ARCH}}"
+        echo "VENV_BASE_PATH: ${VENV_BASE_PATH}"
+        echo "SCRIPT_PATH: ${SCRIPT_PATH}"
+        echo "POLICY_PATH: ${POLICY_PATH}"
+
+  toc:
+    desc: Update the table of contents in README.md
+    silent: true
+    cmds:
+      - |
+        uv run mdtoc README.md
+
+  providers:
+    silent: true
+    desc: Generate a terraform provider cache
+    cmds:
+      - |
+        rm -rf {{.TF_PLUGIN_CACHE_DIR}}
+        mkdir -p {{.TF_PLUGIN_CACHE_DIR}}
+        TF_PLUGIN_CACHE_DIR={{.TF_PLUGIN_CACHE_DIR}} \
+        uv run scripts/install-providers.py
+    status:
+      - test -d {{.TF_PLUGIN_CACHE_DIR}}/registry.terraform.io
+
+  provider:report:
+    desc: Report of downloaded terraform providers and their versions
+    silent: true
+    cmds:
+      - tree -L 4 -d --noreport --prune {{.TF_PLUGIN_CACHE_DIR}} -H './' -T 'Terraform Provider Versions' -o report.html --nolinks --houtro=/dev/null

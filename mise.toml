@@ -1,0 +1,7 @@
+[tools]
+terraform = ["latest", "1.0.11", "1.2.9", "1.5.7"]
+task = "latest"
+tf-summarize = "0.3.13"
+tfsec = "latest"
+opa = ["0.70.0", "latest"]
+uv = "latest"

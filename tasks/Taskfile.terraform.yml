@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3"
+env:
+  tflint: "{{.LOCAL_BIN_PATH}}/tflint"
+  terraform: "{{.LOCAL_BIN_PATH}}/terraform"
+  TF_VERSION: '{{default "1.1.3" .TF_VERSION}}'
+  TF_PATH: '{{default "." .TF_PATH}}'
+  TF_PLAN_NAME:
+    sh: basename {{.TF_PATH}}
+
+tasks:
+  show:
+    desc: Show terraform variables for this task
+    silent: true
+    cmds:
+      - |
+        echo "TF_PATH: {{.TF_PATH}}"
+        echo "TF_PLAN_NAME: {{.TF_PLAN_NAME}}"
+        echo "terraform: {{.terraform}}"
+
+  test:
+    desc: Run terraform validation for all terraform directories.
+    silent: true
+    env:
+      DIRECTORIES:
+        sh: find . -type f -name '*.tf' -not -path "**/.terraform/*" -print0 | xargs -0I {} dirname {} | sort -u
+    cmds:
+      - |
+        BOLD=$(tput bold)
+        NORM=$(tput sgr0)
+        CWD=$PWD
+        for d in $DIRECTORIES; do 
+          cd $d
+          echo "${BOLD}$PWD:${NORM}"
+          if ! terraform fmt -check=true -list=false -recursive=false; then
+            echo "  ✗ terraform fmt" && exit $?
+          else
+            echo "  √ terraform fmt"
+          fi
+          if ! terraform init -backend=false -input=false -get=true -get-plugins=true -no-color > /dev/null; then
+            echo "  ✗ terraform init" && exit $?
+          else
+            echo "  √ terraform init"
+          fi
+          if ! terraform validate > /dev/null; then
+            echo "  ✗ terraform validate" && exit $?
+          else
+            echo "  √ terraform validate"
+          fi
+          cd $CWD
+        done
+
+  lint:
+    desc: Perform tflint on current terraform
+    silent: true
+    cmds:
+      - tflint {{.TF_PATH}}
+
+  format:
+    desc: Perform terraform format on current codebase
+    silent: true
+    cmds:
+      - terraform fmt -recursive -write=true {{.TF_PATH}}
+
+  clean:
+    desc: Clean local cached terreform elements
+    silent: true
+    cmds:
+      - |
+        echo "** TERRAFORM - CLEAN {{.TF_PATH}} **"
+        rm -rf {{.TF_PATH}}/.terraform || true
+        rm -rf {{.TF_PATH}}/.terraform.tfstate || true
+
+  init:
+    desc: Initialize terraform
+    silent: true
+    cmds:
+      - |
+        echo "** TERRAFORM - INIT {{.TF_PATH}} **"
+        {{.terraform}} -chdir={{.TF_PATH}} init -upgrade
+
+  taint:
+    desc: Taint a state element
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} -chdir={{.TF_PATH}} taint {{.TF_TAINT}}
+
+  plan:
+    desc: Plan deployment
+    silent: true
+    cmds:
+      - |
+        echo "** TERRAFORM - PLAN {{.TF_PATH}} **"
+        echo "** TF_PATH - {{.TF_PATH}} **"
+        echo "** TF_PLAN_NAME - {{.TF_PLAN_NAME}} **"
+        {{.terraform}} -chdir={{.TF_PATH}} plan -state={{.TF_PATH}}/terraform.tfstate -out={{.TF_PATH}}/tfplan.plan
+        {{.terraform}} -chdir={{.TF_PATH}} show -json {{.TF_PATH}}/tfplan.plan > {{.TF_PATH}}/tfplan.json
+
+  visualize:
+    desc: Visualize deployment via rover
+    silent: true
+    cmds:
+      - |
+        echo "** TERRAFORM - Visualize ($({{.TF_PLAN_NAME}})) **"
+        rover -workingDir {{.TF_PATH}} \
+          -tfPath {{.terraform}} \
+          -standalone \
+          -name {{.TF_PLAN_NAME}} \
+          -planPath {{.TF_PATH}}/tfplan.plan \
+          -zipFileName {{.TF_PATH}}/plan_map
+        rm -rf {{.DOCS_PATH}}/planmap/{{.TF_PLAN_NAME}}
+        mkdir -p {{.DOCS_PATH}}/planmap/{{.TF_PLAN_NAME}}
+        unzip -d {{.DOCS_PATH}}/planmap/{{.TF_PLAN_NAME}} {{.TF_PATH}}/plan_map.zip && rm {{.TF_PATH}}/plan_map.zip
+
+  apply:
+    desc: Apply deployment
+    silent: true
+    cmds:
+      - |
+        echo "** TERRAFORM - APPLY: {{.TF_PATH}} **"
+        {{.terraform}} -chdir={{.TF_PATH}} apply -state={{.TF_PATH}}/terraform.tfstate -auto-approve
+
+  graph:
+    desc: graph deployment
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} graph -type=apply {{.TF_PATH}}
+
+  upgrade-13:
+    desc: Apply terraform 0.13upgrade
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} 0.13upgrade {{.TF_PATH}}
+
+  destroy:
+    desc: Destroy the environment
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} destroy -state={{.TF_PATH}}/terraform.tfstate -auto-approve {{.TF_PATH}}
+
+  list-state:
+    #desc:  tf state list
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} state list -state={{.TF_PATH}}/terraform.tfstate
+
+  show-state:
+    #desc: Show tf state
+    silent: true
+    cmds:
+      - |
+        {{.terraform}} state show -state={{.TF_PATH}}/terraform.tfstate

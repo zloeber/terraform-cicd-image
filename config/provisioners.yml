@@ -1,0 +1,20 @@
+projects:
+  - name: aws-databricks-flat
+    url: https://github.com/dspatoulas/terraform-databricks.git
+    targets:
+      - branch: main
+        folder: "examples/aws-databricks-flat"
+  - name: terraform-guides
+    url: https://github.com/hashicorp/terraform-guides.git
+    targets:
+      - branch: master
+        folder: "infrastructure-as-code/k8s-cluster-aks"
+      - branch: master
+        folder: "infrastructure-as-code/dynamic-aws-creds-from-vault"
+  - name: nonstandard-provider
+    url: https://github.com/Qovery/terraform-examples.git
+    targets:
+      - branch: main
+        folder: "examples/deploy-an-application-within-3-environments"
+  - name: local-path
+    path: config/providers/latest
